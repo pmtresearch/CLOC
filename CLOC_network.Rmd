@@ -1,0 +1,83 @@
+---
+title: "R Notebook"
+author: "Lee Tran"
+date: "05/19/2018"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+---
+Load data for analysis:
+```{r Load Data, message=FALSE, warning=FALSE}
+library(readr)
+library(readxl)
+CLOC_W1 <- read_csv("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_W1_Variables.csv")
+CLOC_mat <- as.matrix(read_excel("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/PolychoricAnalysis.xlsx", range = "B1:AK37"))
+CLOC_nodes <- read_excel("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_Polychoric.xlsx", sheet = "Sheet2")
+CLOC_groups <- CLOC_Groups <- read_csv("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_Groups.csv")
+save.image("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC/CLOCnet.RData")
+```
+Load packages:
+```{r Load Packages, message=FALSE, warning=FALSE, paged.print=FALSE}
+## Libraries for network analysis ##
+if(!require("dplyr")) install.packages("dplyr")
+if(!require("qgraph")) install.packages("qgraph")
+if(!require("EstimateGroupNetwork")) install.packages("EstimateGroupNetwork")
+if(!require("bootnet")) install.packages("bootnet")
+if(!require("stringr")) install.packages("stringr")
+if(!require("ggplot2")) install.packages("ggplot2")
+if(!require("ggthemes")) install.packages("ggthemes")
+if(!require("igraph")) install.packages("igraph")
+if(!require("network")) install.packages("network")
+if(!require("sna")) install.packages("sna")
+if(!require("visNetwork")) install.packages("visNetwork")
+if(!require("threejs")) install.packages("threejs")
+if(!require("networkD3")) install.packages("networkD3")
+if(!require("reshape2")) install.packages("reshape2")
+# if(!require("ndtv")) install.packages("ndtv")
+
+## Libraries for HiveR ##
+# if(!require("HiveR")) install.packages("HiveR")
+# if(!require("plyr")) install.packages("plyr")
+# if(!require("colorspace")) install.packages("colorspace")
+# if(!require("classInt")) install.packages("classInt")
+# if(!require("tidyverse")) install.packages("tidyverse")
+# if(!require("RColorBrewer")) install.packages("RColorBrewer")
+# library(devtools)
+# if(!require("NetworkComparisonTest")) install_github(
+#   repo = "leettran/NetworkComparisonTest@master")
+```
+Create a correlation matrix and convert to adjacency list:
+```{r Graph Values, message=FALSE, warning=FALSE, paged.print=FALSE}
+CLOC_mat[upper.tri(CLOC_mat)] <- 69
+CLOC_df <- melt(CLOC_mat)
+CLOC_df <- filter(CLOC_df, value != 69) %>% filter(Var1 != Var2)
+CLOC_alist <- CLOC_df %>% 
+      filter(value > 0.65) %>% 
+      filter(value < 1.00)
+names(CLOC_alist) <- c('from', 'target', 'weight')
+symptom.code <- c("ANX1"=1, "ANX2"=2, "ANX3"=3, "DES1"=4, "SHO1"=5, "SHO2"=6, "SHO3"=7, "ANG1"=8, "ANG2"=9, "ANG3"=10, "DES2"=11, "DES3"=12, "YEA1"=13, "YEA2"=14, "YEA3"=15, "RUM1"=16, "RUM2"=17, "RUM3"=18, "YEA4"=19, "DYS1"=20, "DYS2"=21, "APP1"=22, "APP2"=23, "SOM1"=24, "IRR1"=25, "IRR2"=26, "ANH"=27, "CON"=28, "OBT1"=29, "OBT2"=30, "SOM2"=31, "LET"=32, "SUI1"=33, "SUI2"=34, "SUI3"=35, "SUI4"=36)
+CLOC_alist$source <- names(symptom.code)[match(CLOC_alist$from, symptom.code)]
+CLOC_alist$source <- as.factor(CLOC_alist$source)
+```
+Select edges and nodes:
+```{r Define Parameters, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+CLOC.e <- tibble(source = c(CLOC_alist$source), target = c(CLOC_alist$target), value = c((CLOC_alist$weight+1)^(0.5)), distance = c((1/CLOC_alist$weight)))
+CLOC.n <- tibble(name = c(CLOC_nodes$Symptom), size = c((CLOC_nodes$Weight+1)^2), group = c(CLOC_groups$Domain), category = c(CLOC_groups$Category))
+```
+Generate a forceNetwork using networkD3:
+```{r Network Graph, message=FALSE, warning=FALSE, paged.print=FALSE}
+forceNetwork(Links = CLOC.e, Nodes = CLOC.n,
+            Source = "source", Target = "target",
+            Value = "value", NodeID = "name", fontSize = 14,
+            Nodesize = "size", Group = "category", charge = -200,
+            linkDistance = 75, legend = TRUE, opacity = 0.8,
+            zoom = TRUE, bounded = FALSE, opacityNoHover = 1,
+            colourScale = JS("d3.scale.category10()"))
+```
+

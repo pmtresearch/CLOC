@@ -1,0 +1,154 @@
+---
+title: "CLOC Feature Selection using Genetic Algorithms"
+author: Lee Tran
+date: 05/19/2018
+output: html_notebook
+---
+
+```{r Load Packages, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(caret)
+```
+Load data for analysis:
+```{r Load Data, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(readr)
+library(readxl)
+CLOC_W1 <- read_csv("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_W1_Variables.csv")
+CLOC_mat <- as.matrix(read_excel("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/PolychoricAnalysis.xlsx", range = "B1:AK37"))
+CLOC_nodes <- read_excel("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_Polychoric.xlsx", sheet = "Sheet2")
+CLOC_groups <- CLOC_Groups <- read_csv("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_Groups.csv")
+save.image("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC/CLOCnet.RData")
+```
+Feature selection using Genetic Algorithms:
+```{r}
+## FEATURE SELECTION USING GENETIC ALORITHM METHOD ##
+## Use data.frame or matrix ALL where rows are categories and columns are
+## individual samples. Identity of the sample is defined in a different
+## object called ALL.classes. Package GALGO is used.
+
+# load the data and library
+library(galgo)
+data(ALL)
+data(ALL.classes)
+
+# create BigBang object to contain the data
+bb.nc <- configBB.VarSel(
+  data=ALL,
+  classes=ALL.classes,
+  classification.method="nearcent",           # nearest centroid method
+  chromosomeSize=5,                           # number of factors
+  maxSolutions=300,                           # number of solutions
+  goalFitness = 0.90,                         # desired accuracy
+  main="ALL-Tutorial",
+  saveVariable="bb.nc",
+  saveFrequency=30,
+  saveFile="bb.nc.Rdata")
+# full list of parameters can be obtained with '?configBB.VarSel'
+
+# run the program
+blast(bb.nc)
+
+# once complete view the results
+library (galgo)
+loadObject("bb.nc.Rdata")
+plot(bb.nc, type="fitness")               # plot the success
+plot(bb.nc, type="confusion")             # plot overall accuracy
+plot(bb.nc, type="generankstability")     # plot stability
+
+# obtain the confusion matrix, specificity, and sensitivity
+cpm <- classPredictionMatrix(bb.nc)
+cm <- confusionMatrix(bb.nc, cpm)
+sec <- sensitivityClass(bb.nc, cm)
+spc <- specificityClass(bb.nc, cm)
+
+# determine if all factors are contributing to accuracy by
+# randomly deleting a gene one-by-one
+rchr <- lapply(bb.nc$bestChromosomes[1:300], 
+     robustGeneBackwardElimination, bb.nc, result="shortest")
+barplot(table(unlist(lapply(rchr,length))), 
+    main="Length of Shortened Chromosomes")
+
+# use principal component graph to visualize relationship
+pcaModels(bb.nc, fsm, subset=1)
+pcaModels(bb.nc, bb.nc$bestChromosomes[1])
+
+# predict class membership of unknown samples
+data(ALL)
+unknown <- ALL[,1:15]
+?predict.BigBang
+cpm <- predict(bb.nc, newdata=unknown, 
+    func=classPredictionMatrix, splits=1:10)
+cpm
+plot(bb.nc, cpm, type="confusion")
+
+# run the program with real-time results, add the last two lines
+# x11()
+# x11()
+# bb.nc <- configBB.VarSel(
+#  data=ALL,
+#  classes=ALL.classes,
+#  classification.method="nearcent",
+#  chromosomeSize=5,
+#  maxSolutions=300,
+#  goalFitness = 0.90,
+#  main="ALL-Tutorial",
+#  saveVariable="bb.nc",
+#  saveFrequency=30,
+#  saveFile="bb.nc.Rdata",
+#  callBackFuncGALGO=plot,
+#  callBackFuncBB=function(...){dev.set(2);plot(...);dev.set(3); })
+```
+
+
+
+```{r}
+ga_ctrl <- gafsControl(functions = rfGA,
+                       method = "repeatedcv",
+                       repeats = 5)
+
+## Use the same random number seed as the RFE process
+## so that the same CV folds are used for the external
+## resampling. 
+set.seed(10)
+rf_ga <- gafs(x = x, y = y,
+              iters = 200,
+              gafsControl = ga_ctrl)
+rf_ga
+```
+
+```{r}
+plot(rf_ga) + theme_bw()
+```
+
+```{r initial}
+set.seed(128)
+starting <- rfGA$initial(vars = 12, popSize = 8)
+starting
+apply(starting, 1, mean)
+```
+
+```{r desirability}
+library(desirability)
+rfGA2 <- rfGA
+rfGA2$fitness_intern <- function (object, x, y, maximize, p) {
+  RMSE <- rfStats(object)[1]
+  d_RMSE <- dMin(0, 4)
+  d_Size <- dMin(1, p, 2)
+  overall <- dOverall(d_RMSE, d_Size)
+  D <- predict(overall, data.frame(RMSE, ncol(x)))
+  c(D = D, RMSE = as.vector(RMSE))
+  }
+ga_ctrl_d <- gafsControl(functions = rfGA2,
+                         method = "repeatedcv",
+                         repeats = 5,
+                         metric = c(internal = "D", external = "RMSE"),
+                         maximize = c(internal = TRUE, external = FALSE))
+
+set.seed(10)
+rf_ga_d <- gafs(x = x, y = y,
+                iters = 200,
+                gafsControl = ga_ctrl_d)
+
+rf_ga_d
+plot(rf_ga_d) + theme_bw()
+```
+

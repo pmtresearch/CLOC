@@ -1,0 +1,294 @@
+---
+title: "CLOC LCA Analysis"
+author: Lee Tran
+date: 05/19/2018
+output: html_notebook
+---
+Load CLOC data:
+```{r}
+library(readr)
+CLOC_W1 <- read_csv("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC_W1_Variables.csv")
+View(CLOC_W1)
+save.image("C:/Users/Lee/Google Drive/3. Data Analysis/2. Bereavement/Data/R Files/CLOC/CLOC.RData")
+```
+Load packages needed for project:
+```{r Library}
+library("poLCA")
+library("reshape2")
+library("plyr")
+library("dplyr")
+library("poLCA")
+library("ggplot2")
+library("ggparallel")
+library("igraph")
+library("tidyr")
+library("knitr")
+library("ztable")
+library("forcats")
+```
+Defaults of the poLCA command:
+```{r poLCA Defaults}
+poLCA(formula, data, nclass=2, maxiter=1000, graphs=FALSE, tol=1e-10, na.rm=TRUE, probs.start=NULL, nrep=1, verbose=TRUE, calc.se=TRUE)
+```
+Estimate the model with k-classes:
+```{r}
+k<-3
+lc<-poLCA(f, data, nclass=k, nrep=30, na.rm=FALSE, Graph=TRUE)
+```
+Run a sequence of models with two to ten groups. With nrep=10 it runs every model 10 times and keeps the model with the lowest BIC:
+```{r Variable Selection}
+mydata <- CLOC_W1 %>% dplyr::select(ANX1, ANX2, ANX3, DES, SHO1, SHO2, SHO3, ANG1, ANG2, ANG3, DES2, DES3, YEA1, YEA2, YEA3, RUM1, RUM2, RUM3, YEA4, DYS1, DYS2, APP1, APP2, SOM1, IRR1, IRR2, ANH, CON1, OBT1, OBT2, SOM2, LET, SUI1, SUI2, SUI3, SUI4)
+```
+
+```{r Define Function}
+f<-with(mydata, cbind(ANX1, ANX2, ANX3, DES, SHO1, SHO2, SHO3, ANG1, ANG2, ANG3, DES2, DES3, YEA1, YEA2, YEA3, RUM1, RUM2, RUM3, YEA4, DYS1, DYS2, APP1, APP2, SOM1, IRR1, IRR2, ANH, CON1, OBT1, OBT2, SOM2, LET, SUI1, SUI2, SUI3, SUI4)~1)
+```
+Run a sequence of models with 1-10 classes and print out the model with the lowest BIC:
+```{r}
+max_II <- -100000
+min_bic <- 100000
+for(i in 2:10){
+  lc <- poLCA(f, mydata, nclass=i, maxiter=3000, 
+              tol=1e-5, na.rm=FALSE,  
+              nrep=10, verbose=TRUE, calc.se=TRUE)
+  if(lc$bic < min_bic){
+    min_bic <- lc$bic
+    LCA_best_model<-lc
+  }
+}    	
+LCA_best_model
+```
+The result is a conditional item response (column) probabilities, by outcome variable per class (row).
+---
+Generate table showing fitvalues of multiple models:
+```{r Model: Groups, No Covariates}
+set.seed(01012)
+lc1<-poLCA(f, data=mydata, nclass=1, na.rm = FALSE, nrep=30, maxiter=3000) #Loglinear independence model.
+lc2<-poLCA(f, data=mydata, nclass=2, na.rm = FALSE, nrep=30, maxiter=3000)
+lc3<-poLCA(f, data=mydata, nclass=3, na.rm = FALSE, nrep=30, maxiter=3000)
+lc4<-poLCA(f, data=mydata, nclass=4, na.rm = FALSE, nrep=30, maxiter=3000) 
+lc5<-poLCA(f, data=mydata, nclass=5, na.rm = FALSE, nrep=30, maxiter=3000)
+lc6<-poLCA(f, data=mydata, nclass=6, na.rm = FALSE, nrep=30, maxiter=3000)
+```
+Generate dataframe with fit values:
+```{r}
+results <- data.frame(Modell=c("Modell 1"),
+                      log_likelihood=lc1$llik, df=lc1$resid.df, BIC=lc1$bic,
+                      ABIC=(-2*lc1$llik) + ((log((lc1$N + 2)/24)) * lc1$npar),
+                      CAIC=(-2*lc1$llik) + lc1$npar * (1 + log(lc1$N)), likelihood_ratio=lc1$Gsq)
+
+results$Modell<-as.integer(results$Modell)
+results[1,1]<-c("Modell 1")
+results[2,1]<-c("Modell 2")
+results[3,1]<-c("Modell 3")
+results[4,1]<-c("Modell 4")
+results[5,1]<-c("Modell 5")
+results[6,1]<-c("Modell 6")
+
+results[2,2]<-lc2$llik
+results[3,2]<-lc3$llik
+results[4,2]<-lc4$llik
+results[5,2]<-lc5$llik
+results[6,2]<-lc6$llik
+
+results[2,3]<-lc2$resid.df
+results[3,3]<-lc3$resid.df
+results[4,3]<-lc4$resid.df
+results[5,3]<-lc5$resid.df
+results[6,3]<-lc6$resid.df
+
+results[2,4]<-lc2$bic
+results[3,4]<-lc3$bic
+results[4,4]<-lc4$bic
+results[5,4]<-lc5$bic
+results[6,4]<-lc6$bic
+
+results[2,5]<-(-2*lc2$llik) + ((log((lc2$N + 2)/24)) * lc2$npar)                 #abic
+results[3,5]<-(-2*lc3$llik) + ((log((lc3$N + 2)/24)) * lc3$npar)
+results[4,5]<-(-2*lc4$llik) + ((log((lc4$N + 2)/24)) * lc4$npar)
+results[5,5]<-(-2*lc5$llik) + ((log((lc5$N + 2)/24)) * lc5$npar)
+results[6,5]<-(-2*lc6$llik) + ((log((lc6$N + 2)/24)) * lc6$npar)
+
+results[2,6]<- (-2*lc2$llik) + lc2$npar * (1 + log(lc2$N))                       #caic
+results[3,6]<- (-2*lc3$llik) + lc3$npar * (1 + log(lc3$N))
+results[4,6]<- (-2*lc4$llik) + lc4$npar * (1 + log(lc4$N))
+results[5,6]<- (-2*lc5$llik) + lc5$npar * (1 + log(lc5$N))
+results[6,6]<- (-2*lc6$llik) + lc6$npar * (1 + log(lc6$N))
+
+results[2,7]<-lc2$Gsq
+results[3,7]<-lc3$Gsq
+results[4,7]<-lc4$Gsq
+results[5,7]<-lc5$Gsq
+results[6,7]<-lc6$Gsq
+```
+Calculate the Entropy (a pseudo-r-squared) for each solution:
+```{r Entropy}
+entropy<-function (p) sum(-p*log(p))
+
+results$R2_entropy
+results[1,8]<-c("-")
+
+error_prior<-entropy(lc2$P) # class proportions model 2
+error_post<-mean(apply(lc2$posterior,1, entropy),na.rm = TRUE)
+results[2,8]<-round(((error_prior-error_post) / error_prior),3)
+
+error_prior<-entropy(lc3$P) # class proportions model 3
+error_post<-mean(apply(lc3$posterior,1, entropy),na.rm = TRUE)
+results[3,8]<-round(((error_prior-error_post) / error_prior),3)
+
+error_prior<-entropy(lc4$P) # class proportions model 4
+error_post<-mean(apply(lc4$posterior,1, entropy),na.rm = TRUE)
+results[4,8]<-round(((error_prior-error_post) / error_prior),3)
+
+error_prior<-entropy(lc5$P) # class proportions model 5
+error_post<-mean(apply(lc5$posterior,1, entropy),na.rm = TRUE)
+results[5,8]<-round(((error_prior-error_post) / error_prior),3)
+
+error_prior<-entropy(lc6$P) # class proportions model 6
+error_post<-mean(apply(lc6$posterior,1, entropy),na.rm = TRUE)
+results[6,8]<-round(((error_prior-error_post) / error_prior),3)
+
+colnames(results)<-c("Model","log-likelihood","resid. df","BIC","aBIC","cAIC",
+                     "likelihood-ratio","Entropy")
+lca_results<-results
+```
+Generate a HTML-TABLE and show it in the RSTUDIO-Viewer (for copy & paste):
+```{r Entropy Table 1}
+view_kable <- function(x, ...){
+  tab <- paste(capture.output(kable(x, ...)), collapse = '\n')
+  tf <- tempfile(fileext = ".html")
+  writeLines(tab, tf)
+  rstudioapi::viewer(tf)
+}
+view_kable(lca_results, format = 'html', table.attr = "class=nofluid")
+```
+Another possibility which is prettier and easier to do:
+```{r Entropy Table 2}
+library("ztable")
+ztable::ztable(lca_results)
+```
+Elbow-Plot (or Scree-Plot) can be used to see, which solution is parsimonius and has good fit-values. Order categories of results$model in order of appearance:
+```{r}
+library("forcats")
+#results$model < - as_factor(results$model) 
+results2<-tidyr::gather(results,Criteria,Quality,4:7)                  #convert to long format
+results2
+fit.plot<-ggplot(results2) + 
+  geom_point(aes(x=Model,y=Quality),size=3) +
+  geom_line(aes(Model, Quality, group = 1)) +
+  theme_bw()+
+  labs(x = "", y="", title = "") + 
+  facet_grid(Criteria ~. ,scales = "free") +
+  theme_bw(base_size = 16, base_family = "") +   
+  theme(panel.grid.major.x = element_blank() ,
+        panel.grid.major.y = element_line(colour="grey", size=0.5),
+        legend.title = element_text(size = 16, face = 'bold'),
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size = 16),
+        legend.text=  element_text(size=16),
+        axis.line = element_line(colour = "black")) 
+fit.plot
+
+```
+Network plot tries to visualize how classifications of observations (persons) in a latent class analysis change over a sequence of LC-models with growing number of classes. First, estimate 5 latent class models:
+```{r}
+f<-with(mydata, cbind(ANX1, ANX2, ANX3, DES, SHO1, SHO2, SHO3, ANG1, ANG2, ANG3, DES2, DES3, YEA1, YEA2, YEA3, RUM1, RUM2, RUM3, YEA4, DYS1, DYS2, APP1, APP2, SOM1, IRR1, IRR2, ANH, CON1, OBT1, OBT2, SOM2, LET, SUI1, SUI2, SUI3, SUI4)~1)
+lc1<-poLCA(f, data=mydata, nclass=1, na.rm = FALSE, nrep=30, maxiter=3000)
+lc2<-poLCA(f, data=mydata, nclass=2, na.rm = FALSE, nrep=30, maxiter=3000)
+lc3<-poLCA(f, data=mydata, nclass=3, na.rm = FALSE, nrep=30, maxiter=3000)
+lc4<-poLCA(f, data=mydata, nclass=4, na.rm = FALSE, nrep=30, maxiter=3000) 
+lc5<-poLCA(f, data=mydata, nclass=5, na.rm = FALSE, nrep=30, maxiter=3000)
+```
+Load packages:
+```{r}
+library("DiagrammeR")
+library("V8")
+```
+Build dataframe with predicted class for each observation:
+```{r}
+x1<-rep(1, nrow(lc1$predclass))        
+x2<-lc2$predclass
+x3<-lc3$predclass
+x4<-lc4$predclass
+x5<-lc5$predclass
+results <- cbind(x1, x2, x3, x4, x5)
+results <-as.data.frame(results)
+results
+
+# avoid double naming of classes (because each LCA named their classes 1,2,...,k)
+N<-ncol(results) 
+n<-0
+for(i in 2:N) {
+  results[,i]<- (results[,i])+((i-1)+n)
+  n<-((i-1)+n)
+}
+```
+Make a data frame for the edges and counts cross-tabulations and their frequencies:
+```{r}
+g1<-plyr::count(results,c("x1","x2"))
+g2<-plyr::count(results,c("x2","x3"))
+colnames(g2)<-c("x1","x2","freq")
+g3<-plyr::count(results, c("x3","x4"))
+colnames(g3)<-c("x1", "x2","freq")
+g4<-plyr::count(results,c("x4","x5"))
+colnames(g4)<-c("x1","x2","freq")
+edges<-rbind(g1,g2,g3,g4)
+```
+Make a data frame for the class sizes:
+```{r}
+h1<-plyr::count(results,c("x1"))
+h2<-plyr::count(results,c("x2"))
+colnames(h2)<-c("x1","freq")
+h3<- plyr::count(results,c("x3"))
+colnames(h3)<-c("x1","freq")
+h4<-plyr::count(results,c("x4"))
+colnames(h4)<-c("x1","freq")
+h5<-plyr::count(results,c("x5"))
+colnames(h5)<-c("x1", "freq")
+nodes<-rbind(h1,h2,h3,h4,h5)
+```
+Use the data from edges and counts, as well as class sizes in DiagrammeR. Make dataframe for nodes - columns: node, label, type, attributes (e.g. color, size, etc.):
+```{r}
+colnames(nodes)<-c("node","label")
+
+#scale nodes
+nodes <- scale_nodes(nodes_df = nodes,
+                     to_scale = nodes$label,
+                     node_attr = "penwidth",
+                     range = c(2, 5))
+```
+Make dataframe for edges - columns: edge from, edge to, label, relationship, attributes:
+```{r}
+colnames(edges)<-c("from", "to", "label")
+edges$relationship<-c("given_to")
+
+#scale edges
+edges <- scale_edges(edges_df = edges,
+                     to_scale = edges$label,
+                     edge_attr = "penwidth",
+                     range = c(1, 5))
+
+nodes <- scale_nodes(nodes_df = nodes,
+                     to_scale = nodes$penwidth,
+                     node_attr = "alpha:fillcolor",
+                     range = c(5, 90))
+
+nodes
+nodes$label2<-nodes$label
+nodes$label<-paste0(nodes$node)
+```
+# Additional label outside of the ellipses
+# nodes$label<-paste0(nodes$node, "',xlabel=","'",nodes$label2) 
+# Group-number
+# nodes$xlabel<-paste0("(n=",nodes$label2,")")
+
+Finally, plot everything:
+```{r}
+lca_graph<-create_graph(nodes, edges,
+         node_attrs = c("fontname = Helvetica", "color = darkgrey", "style = filled",
+         "fillcolor = lightgrey", "alpha_fillcolor = 0.5"),
+         edge_attrs = c("fontname = Helvetica", "fontsize=10"),
+         graph_attrs=c("layout=dot", "overlap = false", "fixedsize = true", "directed=TRUE"))
+render_graph(lca_graph)
+```
+
